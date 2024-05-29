@@ -1,6 +1,6 @@
 use std::fs;
 
-use oe_df_parse::{parse_df, Entity};
+use oe_schema_parse::{parse_df, Entity};
 use serde_json::to_string_pretty;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
