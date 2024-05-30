@@ -1,7 +1,6 @@
 use std::fs;
 
-use oe_schema_parse::{parse_df, Entity};
-use serde_json::to_string_pretty;
+use oe_schema_parse::{parse_df, print_df, Entity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_contents = fs::read_to_string("../wyatt.df")?;
@@ -9,16 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let results = parse_df(&mut input);
     if let Ok(results) = results {
-        for result in results {
-            match result {
-                Entity::Table(table) => {
-                    for field in &table.fields {
-                        println!("{}", to_string_pretty(field)?);
-                    }
-                }
-                _ => {}
-            }
-        }
+        print_df(results);
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 use core::panic;
+use std::fmt::{self, Display, Formatter};
 use std::io::empty;
 
 use serde::{de, Deserialize, Serialize};
@@ -14,6 +15,7 @@ use winnow::{dispatch, PResult, Parser};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Entity<'a> {
     #[serde(borrow)]
+    #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
     Database(Database<'a>),
     Table(Table<'a>),
     Field(Field<'a>),
@@ -23,6 +25,7 @@ pub enum Entity<'a> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum DataType {
     Logical,
     Character,
@@ -35,12 +38,30 @@ pub enum DataType {
     Raw,
 }
 
+impl Display for DataType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            DataType::Logical => write!(f, "logical"),
+            DataType::Character => write!(f, "character"),
+            DataType::Integer => write!(f, "integer"),
+            DataType::Int64 => write!(f, "int64"),
+            DataType::Decimal => write!(f, "decimal"),
+            DataType::Date => write!(f, "date"),
+            DataType::DateTime => write!(f, "datetime"),
+            DataType::RecId => write!(f, "recid"),
+            DataType::Raw => write!(f, "raw"),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "DATABASE")]
 pub struct Database<'a> {
     pub name: &'a str,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "TABLE")]
 pub struct Table<'a> {
     pub name: &'a str,
     pub area: &'a str,
@@ -57,12 +78,15 @@ pub struct Table<'a> {
     pub table_triggers: Option<Vec<&'a str>>,
     pub fields: Vec<Field<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "")]
     pub indices: Option<Vec<Index<'a>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "FIELD")]
 pub struct Field<'a> {
     pub name: &'a str,
+    #[serde(rename = "AS")]
     pub r#type: DataType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<&'a str>,
@@ -103,13 +127,16 @@ pub struct Field<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decimals: Option<i32>,
     pub order: i32,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub case_sensitive: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub mandatory: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field_trigger: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "INDEX")]
 pub struct Index<'a> {
     pub name: &'a str,
     pub area: &'a str,
@@ -121,11 +148,14 @@ pub struct Index<'a> {
     pub inactive: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub word: bool,
+    #[serde(rename = "")]
     pub fields: Vec<IndexField<'a>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "INDEX-FIELD")]
 pub struct IndexField<'a> {
     pub name: &'a str,
     pub order: SortOrder,
@@ -134,12 +164,14 @@ pub struct IndexField<'a> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SortOrder {
     Ascending,
     Descending,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "SEQUENCE")]
 pub struct Sequence<'a> {
     pub name: &'a str,
     pub initial: i32,
@@ -149,6 +181,7 @@ pub struct Sequence<'a> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub struct End<'a> {
     codepage: &'a str,
     length: i32,
@@ -356,11 +389,15 @@ pub fn parse_indices<'a>(input: &mut &'a str) -> PResult<Vec<Index<'a>>> {
 }
 
 pub fn add_not_index<'a>(input: &mut &'a str) -> PResult<&'a str> {
-    peek(preceded(multispace0, ("ADD ", not("INDEX")))).map(|x| x.0).parse_next(input)
+    peek(preceded(multispace0, ("ADD ", not("INDEX"))))
+        .map(|x| x.0)
+        .parse_next(input)
 }
 
 pub fn add_not_index_succeed<'a>(input: &mut &'a str) -> PResult<bool> {
-    peek(preceded(multispace0, ("ADD ", not("INDEX")))).map(|_| true).parse_next(input)
+    peek(preceded(multispace0, ("ADD ", not("INDEX"))))
+        .map(|_| true)
+        .parse_next(input)
 }
 
 pub fn parse_file_end<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
@@ -380,7 +417,13 @@ pub fn parse_file_end_succeed<'a>(input: &mut &'a str) -> PResult<bool> {
         codepage: delimited("cpstream=", till_line_ending, (multispace0, ".")),
         length: preceded(multispace0, till_line_ending.parse_to())
     }}
-    .map(|x: (End)| if x.codepage == "ISO8859-1" {true} else {false})
+    .map(|x: (End)| {
+        if x.codepage == "ISO8859-1" {
+            true
+        } else {
+            false
+        }
+    })
     .parse_next(input)
 }
 
@@ -456,4 +499,181 @@ pub fn parse_df<'a>(input: &'a str) -> PResult<Vec<Entity<'a>>> {
     let _result = iter.finish();
 
     Ok(entities)
+}
+
+pub fn print_df<'a>(entities: Vec<Entity>) {
+    for entity in entities {
+        match entity {
+            Entity::Database(ref db) => {
+                println!("UPDATE DATABASE \"{}\"", db.name);
+                println!("");
+            }
+            Entity::Table(ref table) => {
+                println!("ADD TABLE \"{}\"", table.name);
+                println!("  AREA \"{}\"", table.area);
+                if let Some(label) = &table.label {
+                    println!("  LABEL \"{}", label.trim_matches('\n'));
+                }
+                if let Some(desc) = &table.description {
+                    println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                }
+                if let Some(valexp) = &table.valexp {
+                    println!("  VALEXP \"{}", valexp.trim_matches('\n'));
+                }
+                if let Some(valmsg) = &table.valmsg {
+                    println!("  VALMSG \"{}", valmsg.trim_matches('\n'));
+                }
+                println!("  DUMP-NAME \"{}", table.dump_name.trim_matches('\n'));
+                if let Some(table_triggers) = &table.table_triggers {
+                    for trigger in table_triggers {
+                        println!("  TABLE-TRIGGER {}", trigger.trim_matches('\n').trim());
+                    }
+                }
+                println!();
+
+                for field in &table.fields {
+                    println!(
+                        "ADD FIELD \"{}\" OF \"{}\" AS {}",
+                        field.name, table.name, field.r#type
+                    );
+                    if let Some(desc) = &field.description {
+                        println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                    }
+                    println!("  FORMAT \"{}", field.format.trim_matches('\n'));
+                    if let Some(format_sa) = &field.format_sa {
+                        println!("  FORMAT-SA \"{}", format_sa.trim_matches('\n'));
+                    }
+                    if field.initial.trim_matches('"').trim() == "?"
+                        && (field.r#type == DataType::Date
+                            || field.r#type == DataType::Character
+                            || field.r#type == DataType::DateTime
+                            || field.r#type == DataType::Logical
+                            || field.r#type == DataType::RecId
+                            || field.r#type == DataType::RecId
+                            || field.r#type == DataType::Decimal 
+                            || field.r#type == DataType::Int64
+                            || field.r#type == DataType::Integer)
+                    {
+                        println!("  INITIAL {}", field.initial.trim());
+                    } else if field.initial.trim_matches('"').trim() == "?" {
+                        println!("  INITIAL \"?\"");
+                    } else {
+                        println!("  INITIAL \"{}", field.initial.trim_matches('\n'));
+                    }
+
+                    if let Some(initial_sa) = &field.initial_sa {
+                        println!("  INITIAL-SA \"{}", initial_sa.trim_matches('\n'));
+                    }
+                    if let Some(label) = &field.label {
+                        println!("  LABEL \"{}", label.trim_matches('\n'));
+                    }
+                    if let Some(label_sa) = &field.label_sa {
+                        println!("  LABEL-SA \"{}", label_sa.trim_matches('\n'));
+                    }
+                    println!("  POSITION {}", field.position);
+                    println!("  SQL-WIDTH {}", field.sql_width);
+                    if let Some(can_read) = &field.can_read {
+                        println!("  CAN-READ \"{}", can_read.trim_matches('\n'));
+                    }
+                    if let Some(can_write) = &field.can_write {
+                        println!("  CAN-WRITE \"{}", can_write.trim_matches('\n'));
+                    }
+                    if let Some(view_as) = &field.view_as {
+                        println!("  VIEW-AS \"{}", view_as.trim_matches('\n'));
+                    }
+                    if let Some(column_label) = &field.column_label {
+                        println!("  COLUMN-LABEL \"{}", column_label.trim_matches('\n'));
+                    }
+                    if let Some(column_label_sa) = &field.column_label_sa {
+                        println!("  COLUMN-LABEL-SA \"{}", column_label_sa.trim_matches('\n'));
+                    }
+                    if let Some(valexp) = &field.valexp {
+                        println!("  VALEXP \"{}", valexp.trim_matches('\n'));
+                    }
+                    if let Some(valmsg) = &field.valmsg {
+                        println!("  VALMSG \"{}", valmsg.trim_matches('\n'));
+                    }
+                    if let Some(valmsg_sa) = &field.valmsg_sa {
+                        println!("  VALMSG-SA \"{}", valmsg_sa.trim_matches('\n'));
+                    }
+                    if let Some(help) = &field.help {
+                        println!("  HELP \"{}", help.trim_matches('\n'));
+                    }
+                    if let Some(help_sa) = &field.help_sa {
+                        println!("  HELP-SA \"{}", help_sa.trim_matches('\n'));
+                    }
+                    if let Some(extent) = &field.extent {
+                        println!("  EXTENT {}", extent);
+                    }
+                    if let Some(decimals) = &field.decimals {
+                        println!("  DECIMALS {}", decimals);
+                    }
+                    println!("  ORDER {}", field.order);
+                    if field.case_sensitive {
+                        println!("  CASE-SENSITIVE");
+                    }
+                    if field.mandatory {
+                        println!("  MANDATORY");
+                    }
+                    if let Some(field_trigger) = &field.field_trigger {
+                        println!("  FIELD-TRIGGER {}", field_trigger.trim_matches('\n'));
+                    }
+                    println!();
+                }
+                for index in table.indices.iter().flatten() {
+                    println!("ADD INDEX \"{}\" ON \"{}\"", index.name, table.name);
+                    println!("  AREA \"{}\"", index.area);
+                    if index.unique {
+                        println!("  UNIQUE");
+                    }
+                    if index.inactive {
+                        println!("  INACTIVE");
+                    }
+                    if index.primary {
+                        println!("  PRIMARY");
+                    }
+                    if let Some(desc) = &index.description {
+                        println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                    }
+                    if index.word {
+                        println!("  WORD");
+                    }
+                    for field in &index.fields {
+                        print!(
+                            "  INDEX-FIELD \"{}\" {}",
+                            field.name,
+                            match field.order {
+                                SortOrder::Ascending => "ASCENDING",
+                                SortOrder::Descending => "DESCENDING",
+                            }
+                        );
+                        if field.abbreviated {
+                            print!(" ABBREVIATED");
+                        }
+                        println!();
+                    }
+                    println!();
+                }
+            }
+            Entity::Sequence(ref seq) => {
+                println!("ADD SEQUENCE \"{}\"", seq.name);
+                println!("  INITIAL {}", seq.initial);
+                println!("  INCREMENT {}", seq.increment);
+                println!(
+                    "  CYCLE-ON-LIMIT {}",
+                    if seq.cycle_on_limit { "yes" } else { "no" }
+                );
+                println!("  MIN-VAL {}", seq.min_val);
+                println!();
+            }
+            Entity::End(ref end) => {
+                println!(".");
+                println!("PSC");
+                println!("cpstream={}", end.codepage);
+                println!(".");
+                println!("{:0>10}", end.length);
+            }
+            _ => {}
+        }
+    }
 }
