@@ -1,5 +1,5 @@
 use std::fmt::{self, Display, Formatter, Write};
-use std::io::Write as ioWrite;
+use std::io::{Cursor, Seek, SeekFrom, Write as ioWrite};
 use serde::{Deserialize, Serialize};
 use winnow::ascii::{multispace0, multispace1, newline, space0, space1, till_line_ending};
 use winnow::combinator::{
@@ -476,7 +476,7 @@ pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     Ok(entities)
 }
 
-pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut impl ioWrite ) -> Result<impl ioWrite + 'a, std::io::Error> {
+pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite + Seek) ) -> Result<impl ioWrite + 'a, std::io::Error> {
 
     for entity in entities {
         match entity {
@@ -647,7 +647,11 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut impl ioWrite ) 
                 writeln!(destination, "PSC")?;
                 writeln!(destination, "cpstream={}", end.codepage)?;
                 writeln!(destination, ".")?;
-                writeln!(destination, "{:0>10}", end.length)?;
+                
+                // DF Files have the length of the file at the end so we gra the current position, and add 10
+                let length = destination.seek(SeekFrom::Current(0))?;
+                
+                writeln!(destination, "{:0>10}", length + 10)?;
             }
             _ => {}
         }
@@ -657,7 +661,7 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut impl ioWrite ) 
 }
 
 pub fn write_fmt_df(entities: &Vec<Entity>) -> String {
-    let mut output = Vec::new();
+    let mut output = Cursor::new(Vec::new());
     write_df(entities, &mut output).unwrap();
-    String::from_utf8(output).unwrap()
+    String::from_utf8(output.into_inner()).unwrap()
 }
