@@ -1,15 +1,13 @@
-use core::panic;
 use std::fmt::{self, Display, Formatter};
-use std::io::empty;
 
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use winnow::ascii::{multispace0, multispace1, newline, space0, space1, till_line_ending};
 use winnow::combinator::{
     alt, delimited, fail, iterator, not, opt, peek, preceded, repeat_till, seq, terminated, trace,
 };
 use winnow::error::ParserError;
 use winnow::stream::AsChar;
-use winnow::token::{any, take, take_till, take_until, take_while};
+use winnow::token::{any, take_while};
 use winnow::{dispatch, PResult, Parser};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -255,7 +253,11 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
     delimited(multispace0, "ADD INDEX", multispace0).parse_next(input)?;
 
-    let index = Ok(seq! {
+    
+
+    //println!("{:?}", index);
+
+    seq! {
         Index {
             name: terminated(delimited('"',take_while(0.., |c: char| c != '"'),'"'), seq!(space0, "ON", space0, delimited('"', take_while(0.., |c: char| c != '"'), '"'))),
             area: delimited(
@@ -281,7 +283,7 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
                     delimited(space0, alt(("ASCENDING", "DESCENDING")), space0),
                     opt(delimited(space0, "ABBREVIATED", space0))
                 ).map(|(name, order, abbrev)| IndexField {
-                    name: name,
+                    name,
                     order: match order {
                         "ASCENDING" => SortOrder::Ascending,
                         "DESCENDING" => SortOrder::Descending,
@@ -292,11 +294,7 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
                 peek(seq!(newline, newline))
             ).map(|x| x.0)
         }
-    }.parse_next(input)?);
-
-    //println!("{:?}", index);
-
-    index
+    }.parse_next(input)
 }
 
 pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
@@ -306,7 +304,15 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         println!("{}", line)
     } */
 
-    let field = Ok(seq!{Field {
+    
+
+    /* if let Ok(field) = &field {
+        if let Some(field) = &field.description {
+            println!("{:?}", field.trim());
+        }
+    }; */
+
+    seq!{Field {
         name: terminated(delimited('"',take_while(0.., |c: char| c != '"'), '"'), seq!(multispace0, "OF", multispace0, delimited('"',take_while(0.., |c: char| c != '"'), '"'))),
         r#type: preceded(seq!(multispace0, "AS", multispace1), alt(("logical", "character", "integer", "int64", "decimal", "date", "datetime", "recid", "raw"))).map(|x| match x {
             "logical" => DataType::Logical,
@@ -327,8 +333,8 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         initial_sa: opt(preceded(keyword_trim("INITIAL-SA"), trim_quotes(until_field_keyword_or_new))),
         label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_field_keyword_or_new))),
         label_sa: opt(preceded(keyword_trim("LABEL-SA"), trim_quotes(until_field_keyword_or_new))),
-        position: preceded(keyword_trim("POSITION"), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
-        sql_width: preceded(keyword_trim("SQL-WIDTH"), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
+        position: preceded(keyword_trim("POSITION"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        sql_width: preceded(keyword_trim("SQL-WIDTH"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
         can_read: opt(preceded(keyword_trim("CAN-READ"), trim_quotes(until_field_keyword_or_new))),
         can_write: opt(preceded(keyword_trim("CAN-WRITE"), trim_quotes(until_field_keyword_or_new))),
         view_as: opt(preceded(keyword_trim("VIEW-AS"), trim_quotes(until_field_keyword_or_new))),
@@ -339,21 +345,13 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         valmsg_sa: opt(preceded(keyword_trim("VALMSG-SA"), trim_quotes(until_field_keyword_or_new))),
         help: opt(preceded(keyword_trim("HELP"), trim_quotes(until_field_keyword_or_new))),
         help_sa: opt(preceded(keyword_trim("HELP-SA"), trim_quotes(until_field_keyword_or_new))),
-        extent: opt(preceded(keyword_trim("EXTENT"), take_while(0.., |c: char| c.is_digit(10)).parse_to())),
-        decimals: opt(preceded(keyword_trim("DECIMALS"), take_while(0.., |c: char| c.is_digit(10)).parse_to())),
-        order: preceded(keyword_trim("ORDER"), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
+        extent: opt(preceded(keyword_trim("EXTENT"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
+        decimals: opt(preceded(keyword_trim("DECIMALS"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
+        order: preceded(keyword_trim("ORDER"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
         case_sensitive: opt(keyword_trim("CASE-SENSITIVE")).map(|x| x.is_some()),
         mandatory: opt(keyword_trim("MANDATORY")).map(|x| x.is_some()),
         field_trigger: opt(preceded(seq!(multispace0, "FIELD-TRIGGER", space1), take_while(0.., |c: char| ! c.is_newline()))),
-    }}.parse_next(input)?);
-
-    /* if let Ok(field) = &field {
-        if let Some(field) = &field.description {
-            println!("{:?}", field.trim());
-        }
-    }; */
-
-    field
+    }}.parse_next(input)
 }
 
 pub(crate) fn keyword_trim<'a, F, O, E>(inner: F) -> impl Parser<&'a str, O, E>
@@ -394,7 +392,7 @@ pub fn add_not_index<'a>(input: &mut &'a str) -> PResult<&'a str> {
         .parse_next(input)
 }
 
-pub fn add_not_index_succeed<'a>(input: &mut &'a str) -> PResult<bool> {
+pub fn add_not_index_succeed(input: &mut &str) -> PResult<bool> {
     peek(preceded(multispace0, ("ADD ", not("INDEX"))))
         .map(|_| true)
         .parse_next(input)
@@ -411,18 +409,14 @@ pub fn parse_file_end<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
     ))
 }
 
-pub fn parse_file_end_succeed<'a>(input: &mut &'a str) -> PResult<bool> {
+pub fn parse_file_end_succeed(input: &mut &str) -> PResult<bool> {
     let _ = seq!(multispace0, ".", multispace0, "PSC", multispace0).parse_next(input)?;
     seq! { End{
         codepage: delimited("cpstream=", till_line_ending, (multispace0, ".")),
         length: preceded(multispace0, till_line_ending.parse_to())
     }}
-    .map(|x: (End)| {
-        if x.codepage == "ISO8859-1" {
-            true
-        } else {
-            false
-        }
+    .map(|x: End| {
+        x.codepage == "ISO8859-1"
     })
     .parse_next(input)
 }
@@ -482,10 +476,10 @@ pub fn parse_sequence<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 
     Ok(Entity::Sequence(seq!{Sequence {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
-        initial: preceded(seq!(multispace0, "INITIAL", multispace1), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
-        increment: preceded(seq!(multispace0, "INCREMENT", multispace1), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
+        initial: preceded(seq!(multispace0, "INITIAL", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        increment: preceded(seq!(multispace0, "INCREMENT", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
         cycle_on_limit: preceded(seq!(multispace0, "CYCLE-ON-LIMIT", multispace1), alt(("yes", "no"))).map(|x: &str| x == "yes"),
-        min_val: preceded(seq!(multispace0, "MIN-VAL", multispace1), take_while(0.., |c: char| c.is_digit(10)).parse_to()),
+        min_val: preceded(seq!(multispace0, "MIN-VAL", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
     }}.parse_next(input)?))
 }
 
@@ -493,7 +487,7 @@ pub fn until_whitespace<'a>(input: &mut &'a str) -> PResult<&'a str> {
     take_while(0.., |c: char| !c.is_whitespace()).parse_next(input)
 }
 
-pub fn parse_df<'a>(input: &'a str) -> PResult<Vec<Entity<'a>>> {
+pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     let mut iter = iterator(input, dispatch);
     let entities = iter.collect::<Vec<Entity>>();
     let _result = iter.finish();
@@ -506,7 +500,7 @@ pub fn print_df<'a>(entities: Vec<Entity>) {
         match entity {
             Entity::Database(ref db) => {
                 println!("UPDATE DATABASE \"{}\"", db.name);
-                println!("");
+                println!();
             }
             Entity::Table(ref table) => {
                 println!("ADD TABLE \"{}\"", table.name);
