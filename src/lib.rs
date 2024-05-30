@@ -62,7 +62,7 @@ pub struct Database<'a> {
 #[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "TABLE")]
 pub struct Table<'a> {
     pub name: &'a str,
-    pub area: &'a str,
+    pub area: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -234,7 +234,7 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 
     Ok(Entity::Table(seq!{Table {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
-        area: preceded(keyword_trim("AREA"), delimited('"', take_while(0.., |c: char| c != '"'), '"')),
+        area: preceded(keyword_trim("AREA"), delimited('"', take_while(0.., |c: char| c != '"'), '"')).parse_to(),
         label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_table_keyword_or_new))),
         description: opt(trim_quotes(trim(preceded(keyword_trim("DESCRIPTION"), until_table_keyword_or_new)))),
         valexp: opt(preceded(keyword_trim("VALEXP"), trim_quotes(until_table_keyword_or_new))),
