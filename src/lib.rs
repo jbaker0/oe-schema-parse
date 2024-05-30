@@ -1,5 +1,5 @@
 use std::fmt::{self, Display, Formatter, Write};
-
+use std::io::Write as ioWrite;
 use serde::{Deserialize, Serialize};
 use winnow::ascii::{multispace0, multispace1, newline, space0, space1, till_line_ending};
 use winnow::combinator::{
@@ -250,10 +250,6 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
     delimited(multispace0, "ADD INDEX", multispace0).parse_next(input)?;
 
-    
-
-    //writeln!(output, "{:?}", index);
-
     seq! {
         Index {
             name: terminated(delimited('"',take_while(0.., |c: char| c != '"'),'"'), seq!(space0, "ON", space0, delimited('"', take_while(0.., |c: char| c != '"'), '"'))),
@@ -480,7 +476,8 @@ pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     Ok(entities)
 }
 
-pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl Write) -> Result<impl Write + 'a, std::fmt::Error> {
+pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl ioWrite ) -> Result<impl ioWrite + 'a, std::io::Error> {
+
     for entity in entities {
         match entity {
             Entity::Database(ref db) => {
