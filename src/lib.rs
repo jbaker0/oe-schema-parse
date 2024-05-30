@@ -137,7 +137,7 @@ pub struct Field<'a> {
 #[serde(rename_all = "SCREAMING-KEBAB-CASE", rename = "INDEX")]
 pub struct Index<'a> {
     pub name: &'a str,
-    pub area: &'a str,
+    pub area: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<&'a str>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -257,7 +257,7 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
                 seq!(multispace0, "AREA", space1),
                 trim_quotes(take_while(0.., |c: char| c != '"')),
                 space0
-            ),
+            ).parse_to(),
             unique: delimited(multispace0, opt("UNIQUE"), space0).map(|x| x.is_some()),
             inactive: delimited(multispace0, opt("INACTIVE"), space0).map(|x| x.is_some()),
             primary: delimited(multispace0, opt("PRIMARY"), space0).map(|x| x.is_some()),
