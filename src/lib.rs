@@ -476,7 +476,7 @@ pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     Ok(entities)
 }
 
-pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl ioWrite ) -> Result<impl ioWrite + 'a, std::io::Error> {
+pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut impl ioWrite ) -> Result<impl ioWrite + 'a, std::io::Error> {
 
     for entity in entities {
         match entity {
@@ -656,7 +656,7 @@ pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl ioWrite ) -
     Ok(destination)
 }
 
-pub fn write_fmt_df(entities: Vec<Entity>) -> String {
+pub fn write_fmt_df(entities: &Vec<Entity>) -> String {
     let mut output = Vec::new();
     write_df(entities, &mut output).unwrap();
     String::from_utf8(output).unwrap()
