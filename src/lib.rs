@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display, Formatter, Write};
 
 use serde::{Deserialize, Serialize};
 use winnow::ascii::{multispace0, multispace1, newline, space0, space1, till_line_ending};
@@ -231,9 +231,6 @@ pub fn parse_add<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 
 pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
     delimited(multispace0, "TABLE", multispace0).parse_next(input)?;
-    /* if let Some(line) = input.lines().next() {
-        println!("{}", line)
-    } */
 
     Ok(Entity::Table(seq!{Table {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
@@ -255,7 +252,7 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
 
     
 
-    //println!("{:?}", index);
+    //writeln!(output, "{:?}", index);
 
     seq! {
         Index {
@@ -299,18 +296,6 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
 
 pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
     delimited(multispace0, "ADD FIELD", multispace0).parse_next(input)?;
-
-    /* if let Some(line) = input.lines().next() {
-        println!("{}", line)
-    } */
-
-    
-
-    /* if let Ok(field) = &field {
-        if let Some(field) = &field.description {
-            println!("{:?}", field.trim());
-        }
-    }; */
 
     seq!{Field {
         name: terminated(delimited('"',take_while(0.., |c: char| c != '"'), '"'), seq!(multispace0, "OF", multispace0, delimited('"',take_while(0.., |c: char| c != '"'), '"'))),
@@ -495,47 +480,47 @@ pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     Ok(entities)
 }
 
-pub fn print_df<'a>(entities: Vec<Entity>) {
+pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl Write) -> Result<impl Write + 'a, std::fmt::Error> {
     for entity in entities {
         match entity {
             Entity::Database(ref db) => {
-                println!("UPDATE DATABASE \"{}\"", db.name);
-                println!();
+                writeln!(destination, "UPDATE DATABASE \"{}\"", db.name)?;
+                writeln!(destination, )?;
             }
             Entity::Table(ref table) => {
-                println!("ADD TABLE \"{}\"", table.name);
-                println!("  AREA \"{}\"", table.area);
+                writeln!(destination, "ADD TABLE \"{}\"", table.name)?;
+                writeln!(destination, "  AREA \"{}\"", table.area)?;
                 if let Some(label) = &table.label {
-                    println!("  LABEL \"{}", label.trim_matches('\n'));
+                    writeln!(destination, "  LABEL \"{}", label.trim_matches('\n'))?;
                 }
                 if let Some(desc) = &table.description {
-                    println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                    writeln!(destination, "  DESCRIPTION {}", desc.trim_matches('\n'))?;
                 }
                 if let Some(valexp) = &table.valexp {
-                    println!("  VALEXP \"{}", valexp.trim_matches('\n'));
+                    writeln!(destination, "  VALEXP \"{}", valexp.trim_matches('\n'))?;
                 }
                 if let Some(valmsg) = &table.valmsg {
-                    println!("  VALMSG \"{}", valmsg.trim_matches('\n'));
+                    writeln!(destination, "  VALMSG \"{}", valmsg.trim_matches('\n'))?;
                 }
-                println!("  DUMP-NAME \"{}", table.dump_name.trim_matches('\n'));
+                writeln!(destination, "  DUMP-NAME \"{}", table.dump_name.trim_matches('\n'))?;
                 if let Some(table_triggers) = &table.table_triggers {
                     for trigger in table_triggers {
-                        println!("  TABLE-TRIGGER {}", trigger.trim_matches('\n').trim());
+                        writeln!(destination, "  TABLE-TRIGGER {}", trigger.trim_matches('\n').trim())?;
                     }
                 }
-                println!();
+                writeln!(destination, )?;
 
                 for field in &table.fields {
-                    println!(
+                    writeln!(destination, 
                         "ADD FIELD \"{}\" OF \"{}\" AS {}",
                         field.name, table.name, field.r#type
-                    );
+                    )?;
                     if let Some(desc) = &field.description {
-                        println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                        writeln!(destination, "  DESCRIPTION {}", desc.trim_matches('\n'))?;
                     }
-                    println!("  FORMAT \"{}", field.format.trim_matches('\n'));
+                    writeln!(destination, "  FORMAT \"{}", field.format.trim_matches('\n'))?;
                     if let Some(format_sa) = &field.format_sa {
-                        println!("  FORMAT-SA \"{}", format_sa.trim_matches('\n'));
+                        writeln!(destination, "  FORMAT-SA \"{}", format_sa.trim_matches('\n'))?;
                     }
                     if field.initial.trim_matches('"').trim() == "?"
                         && (field.r#type == DataType::Date
@@ -548,126 +533,128 @@ pub fn print_df<'a>(entities: Vec<Entity>) {
                             || field.r#type == DataType::Int64
                             || field.r#type == DataType::Integer)
                     {
-                        println!("  INITIAL {}", field.initial.trim());
+                        writeln!(destination, "  INITIAL {}", field.initial.trim())?;
                     } else if field.initial.trim_matches('"').trim() == "?" {
-                        println!("  INITIAL \"?\"");
+                        writeln!(destination, "  INITIAL \"?\"")?;
                     } else {
-                        println!("  INITIAL \"{}", field.initial.trim_matches('\n'));
+                        writeln!(destination, "  INITIAL \"{}", field.initial.trim_matches('\n'))?;
                     }
 
                     if let Some(initial_sa) = &field.initial_sa {
-                        println!("  INITIAL-SA \"{}", initial_sa.trim_matches('\n'));
+                        writeln!(destination, "  INITIAL-SA \"{}", initial_sa.trim_matches('\n'))?;
                     }
                     if let Some(label) = &field.label {
-                        println!("  LABEL \"{}", label.trim_matches('\n'));
+                        writeln!(destination, "  LABEL \"{}", label.trim_matches('\n'))?;
                     }
                     if let Some(label_sa) = &field.label_sa {
-                        println!("  LABEL-SA \"{}", label_sa.trim_matches('\n'));
+                        writeln!(destination, "  LABEL-SA \"{}", label_sa.trim_matches('\n'))?;
                     }
-                    println!("  POSITION {}", field.position);
-                    println!("  SQL-WIDTH {}", field.sql_width);
+                    writeln!(destination, "  POSITION {}", field.position)?;
+                    writeln!(destination, "  SQL-WIDTH {}", field.sql_width)?;
                     if let Some(can_read) = &field.can_read {
-                        println!("  CAN-READ \"{}", can_read.trim_matches('\n'));
+                        writeln!(destination, "  CAN-READ \"{}", can_read.trim_matches('\n'))?;
                     }
                     if let Some(can_write) = &field.can_write {
-                        println!("  CAN-WRITE \"{}", can_write.trim_matches('\n'));
+                        writeln!(destination, "  CAN-WRITE \"{}", can_write.trim_matches('\n'))?;
                     }
                     if let Some(view_as) = &field.view_as {
-                        println!("  VIEW-AS \"{}", view_as.trim_matches('\n'));
+                        writeln!(destination, "  VIEW-AS \"{}", view_as.trim_matches('\n'))?;
                     }
                     if let Some(column_label) = &field.column_label {
-                        println!("  COLUMN-LABEL \"{}", column_label.trim_matches('\n'));
+                        writeln!(destination, "  COLUMN-LABEL \"{}", column_label.trim_matches('\n'))?;
                     }
                     if let Some(column_label_sa) = &field.column_label_sa {
-                        println!("  COLUMN-LABEL-SA \"{}", column_label_sa.trim_matches('\n'));
+                        writeln!(destination, "  COLUMN-LABEL-SA \"{}", column_label_sa.trim_matches('\n'))?;
                     }
                     if let Some(valexp) = &field.valexp {
-                        println!("  VALEXP \"{}", valexp.trim_matches('\n'));
+                        writeln!(destination, "  VALEXP \"{}", valexp.trim_matches('\n'))?;
                     }
                     if let Some(valmsg) = &field.valmsg {
-                        println!("  VALMSG \"{}", valmsg.trim_matches('\n'));
+                        writeln!(destination, "  VALMSG \"{}", valmsg.trim_matches('\n'))?;
                     }
                     if let Some(valmsg_sa) = &field.valmsg_sa {
-                        println!("  VALMSG-SA \"{}", valmsg_sa.trim_matches('\n'));
+                        writeln!(destination, "  VALMSG-SA \"{}", valmsg_sa.trim_matches('\n'))?;
                     }
                     if let Some(help) = &field.help {
-                        println!("  HELP \"{}", help.trim_matches('\n'));
+                        writeln!(destination, "  HELP \"{}", help.trim_matches('\n'))?;
                     }
                     if let Some(help_sa) = &field.help_sa {
-                        println!("  HELP-SA \"{}", help_sa.trim_matches('\n'));
+                        writeln!(destination, "  HELP-SA \"{}", help_sa.trim_matches('\n'))?;
                     }
                     if let Some(extent) = &field.extent {
-                        println!("  EXTENT {}", extent);
+                        writeln!(destination, "  EXTENT {}", extent)?;
                     }
                     if let Some(decimals) = &field.decimals {
-                        println!("  DECIMALS {}", decimals);
+                        writeln!(destination, "  DECIMALS {}", decimals)?;
                     }
-                    println!("  ORDER {}", field.order);
+                    writeln!(destination, "  ORDER {}", field.order)?;
                     if field.case_sensitive {
-                        println!("  CASE-SENSITIVE");
+                        writeln!(destination, "  CASE-SENSITIVE")?;
                     }
                     if field.mandatory {
-                        println!("  MANDATORY");
+                        writeln!(destination, "  MANDATORY")?;
                     }
                     if let Some(field_trigger) = &field.field_trigger {
-                        println!("  FIELD-TRIGGER {}", field_trigger.trim_matches('\n'));
+                        writeln!(destination, "  FIELD-TRIGGER {}", field_trigger.trim_matches('\n'))?;
                     }
-                    println!();
+                    writeln!(destination, )?;
                 }
                 for index in table.indices.iter().flatten() {
-                    println!("ADD INDEX \"{}\" ON \"{}\"", index.name, table.name);
-                    println!("  AREA \"{}\"", index.area);
+                    writeln!(destination, "ADD INDEX \"{}\" ON \"{}\"", index.name, table.name)?;
+                    writeln!(destination, "  AREA \"{}\"", index.area)?;
                     if index.unique {
-                        println!("  UNIQUE");
+                        writeln!(destination, "  UNIQUE")?;
                     }
                     if index.inactive {
-                        println!("  INACTIVE");
+                        writeln!(destination, "  INACTIVE")?;
                     }
                     if index.primary {
-                        println!("  PRIMARY");
+                        writeln!(destination, "  PRIMARY")?;
                     }
                     if let Some(desc) = &index.description {
-                        println!("  DESCRIPTION {}", desc.trim_matches('\n'));
+                        writeln!(destination, "  DESCRIPTION {}", desc.trim_matches('\n'))?;
                     }
                     if index.word {
-                        println!("  WORD");
+                        writeln!(destination, "  WORD")?;
                     }
                     for field in &index.fields {
-                        print!(
+                        write!(destination,
                             "  INDEX-FIELD \"{}\" {}",
                             field.name,
                             match field.order {
                                 SortOrder::Ascending => "ASCENDING",
                                 SortOrder::Descending => "DESCENDING",
                             }
-                        );
+                        )?;
                         if field.abbreviated {
-                            print!(" ABBREVIATED");
+                            write!(destination, " ABBREVIATED")?;
                         }
-                        println!();
+                        writeln!(destination, )?;
                     }
-                    println!();
+                    writeln!(destination, )?;
                 }
             }
             Entity::Sequence(ref seq) => {
-                println!("ADD SEQUENCE \"{}\"", seq.name);
-                println!("  INITIAL {}", seq.initial);
-                println!("  INCREMENT {}", seq.increment);
-                println!(
+                writeln!(destination, "ADD SEQUENCE \"{}\"", seq.name)?;
+                writeln!(destination, "  INITIAL {}", seq.initial)?;
+                writeln!(destination, "  INCREMENT {}", seq.increment)?;
+                writeln!(destination, 
                     "  CYCLE-ON-LIMIT {}",
                     if seq.cycle_on_limit { "yes" } else { "no" }
-                );
-                println!("  MIN-VAL {}", seq.min_val);
-                println!();
+                )?;
+                writeln!(destination, "  MIN-VAL {}", seq.min_val)?;
+                writeln!(destination, )?;
             }
             Entity::End(ref end) => {
-                println!(".");
-                println!("PSC");
-                println!("cpstream={}", end.codepage);
-                println!(".");
-                println!("{:0>10}", end.length);
+                writeln!(destination, ".")?;
+                writeln!(destination, "PSC")?;
+                writeln!(destination, "cpstream={}", end.codepage)?;
+                writeln!(destination, ".")?;
+                writeln!(destination, "{:0>10}", end.length)?;
             }
             _ => {}
         }
     }
+
+    Ok(destination)
 }
