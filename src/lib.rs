@@ -655,3 +655,9 @@ pub fn write_df<'a>(entities: Vec<Entity>, destination: &'a mut impl ioWrite ) -
 
     Ok(destination)
 }
+
+pub fn write_fmt_df(entities: Vec<Entity>) -> String {
+    let mut output = Vec::new();
+    write_df(entities, &mut output).unwrap();
+    String::from_utf8(output).unwrap()
+}
