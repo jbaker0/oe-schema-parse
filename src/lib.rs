@@ -648,7 +648,7 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                 writeln!(destination, "cpstream={}", end.codepage)?;
                 writeln!(destination, ".")?;
                 
-                // DF Files have the length of the file at the end so we gra the current position, and add 10
+                // DF Files have the length of the file at the end so we get the current position, and add 10
                 let length = destination.seek(SeekFrom::Current(0))?;
                 
                 writeln!(destination, "{:0>10}", length + 10)?;
