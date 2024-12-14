@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter, Write};
 use std::io::{Cursor, Seek, SeekFrom, Write as ioWrite};
-use serde::{Deserialize, Serialize};
-use winnow::ascii::{multispace0, multispace1, newline, space0, space1, till_line_ending};
+use winnow::ascii::{
+    multispace0, multispace1, newline, space0, space1, till_line_ending, Caseless,
+};
 use winnow::combinator::{
     alt, delimited, fail, iterator, not, opt, peek, preceded, repeat_till, seq, terminated, trace,
 };
@@ -76,7 +78,7 @@ pub struct Table<'a> {
     pub table_triggers: Option<Vec<&'a str>>,
     pub fields: Vec<Field<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "")]
+    #[serde(rename = "INDICES")]
     pub indices: Option<Vec<Index<'a>>>,
 }
 
@@ -148,7 +150,7 @@ pub struct Index<'a> {
     pub primary: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub word: bool,
-    #[serde(rename = "")]
+    #[serde(rename = "INDEX-FIELDS")]
     pub fields: Vec<IndexField<'a>>,
 }
 
@@ -212,14 +214,14 @@ pub fn dispatch<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 }
 
 pub fn parse_start<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
-    let _ = delimited(multispace0, "UPDATE DATABASE", multispace0).parse_next(input)?;
+    let _ = delimited(multispace0, Caseless("UPDATE DATABASE"), multispace0).parse_next(input)?;
     Ok(Entity::Database(Database {
         name: trim_quotes(take_while(0.., |c: char| c != '"')).parse_next(input)?,
     }))
 }
 
 pub fn parse_add<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
-    delimited(multispace0, "ADD", multispace0).parse_next(input)?;
+    delimited(multispace0, Caseless("ADD"), multispace0).parse_next(input)?;
 
     dispatch! {peek(until_whitespace);
       "TABLE" => parse_table,
@@ -230,17 +232,17 @@ pub fn parse_add<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 }
 
 pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
-    delimited(multispace0, "TABLE", multispace0).parse_next(input)?;
+    delimited(multispace0, Caseless("TABLE"), multispace0).parse_next(input)?;
 
     Ok(Entity::Table(seq!{Table {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
-        area: preceded(keyword_trim("AREA"), delimited('"', take_while(0.., |c: char| c != '"'), '"')).parse_to(),
-        label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_table_keyword_or_new))),
-        description: opt(trim_quotes(trim(preceded(keyword_trim("DESCRIPTION"), until_table_keyword_or_new)))),
-        valexp: opt(preceded(keyword_trim("VALEXP"), trim_quotes(until_table_keyword_or_new))),
-        valmsg: opt(preceded(keyword_trim("VALMSG"), trim_quotes(until_table_keyword_or_new))),
-        dump_name: preceded(keyword_trim("DUMP-NAME"), trim_quotes(until_table_keyword_or_new)),
-        table_triggers: opt(repeat_till(0.., preceded(multispace0, preceded("TABLE-TRIGGER", take_while(0.., |c:char|!c.is_newline()))), trace("ADD_NOT_INDEX", peek(preceded(take_while(0..,|c: char| c.is_newline()), ("ADD ", not("INDEX")))))).map(|x: (Vec<&str>, (&str, ())) | x.0)),
+        area: preceded(keyword_trim(Caseless("AREA")), delimited('"', take_while(0.., |c: char| c != '"'), '"')).parse_to(),
+        label: opt(preceded(keyword_trim(Caseless("LABEL")), trim_quotes(until_table_keyword_or_new))),
+        description: opt(trim_quotes(trim(preceded(keyword_trim(Caseless("DESCRIPTION")), until_table_keyword_or_new)))),
+        valexp: opt(preceded(keyword_trim(Caseless("VALEXP")), trim_quotes(until_table_keyword_or_new))),
+        valmsg: opt(preceded(keyword_trim(Caseless("VALMSG")), trim_quotes(until_table_keyword_or_new))),
+        dump_name: preceded(keyword_trim(Caseless("DUMP-NAME")), trim_quotes(until_table_keyword_or_new)),
+        table_triggers: opt(repeat_till(0.., preceded(multispace0, preceded(Caseless("TABLE-TRIGGER"), take_while(0.., |c:char|!c.is_newline()))), trace("ADD_NOT_INDEX", peek(preceded(take_while(0..,|c: char| c.is_newline()), ("ADD ", not("INDEX")))))).map(|x: (Vec<&str>, (&str, ())) | x.0)),
         fields: repeat_till(0.., preceded(multispace0, parse_field), trace("ADD_NOT_FIELD", peek(preceded(take_while(0..,|c: char| c.is_newline()), ("ADD ", not("FIELD")))))).map(|x: (Vec<Field>, (&str, ())) | x.0),
         indices: opt(parse_indices),
     }
@@ -248,33 +250,33 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 }
 
 pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
-    delimited(multispace0, "ADD INDEX", multispace0).parse_next(input)?;
+    delimited(multispace0, Caseless("ADD INDEX"), multispace0).parse_next(input)?;
 
     seq! {
         Index {
-            name: terminated(delimited('"',take_while(0.., |c: char| c != '"'),'"'), seq!(space0, "ON", space0, delimited('"', take_while(0.., |c: char| c != '"'), '"'))),
+            name: terminated(delimited('"',take_while(0.., |c: char| c != '"'),'"'), seq!(space0, Caseless("ON"), space0, delimited('"', take_while(0.., |c: char| c != '"'), '"'))),
             area: delimited(
-                seq!(multispace0, "AREA", space1),
+                seq!(multispace0, Caseless("AREA"), space1),
                 trim_quotes(take_while(0.., |c: char| c != '"')),
                 space0
             ).parse_to(),
-            unique: delimited(multispace0, opt("UNIQUE"), space0).map(|x| x.is_some()),
-            inactive: delimited(multispace0, opt("INACTIVE"), space0).map(|x| x.is_some()),
-            primary: delimited(multispace0, opt("PRIMARY"), space0).map(|x| x.is_some()),
+            unique: delimited(multispace0, opt(Caseless("UNIQUE")), space0).map(|x| x.is_some()),
+            inactive: delimited(multispace0, opt(Caseless("INACTIVE")), space0).map(|x| x.is_some()),
+            primary: delimited(multispace0, opt(Caseless("PRIMARY")), space0).map(|x| x.is_some()),
             description: opt(preceded(
-                seq!(multispace0, "DESCRIPTION", space1),
+                seq!(multispace0, Caseless("DESCRIPTION"), space1),
                 take_while(0.., |c: char| !c.is_newline())
             )),
-            word: delimited(multispace0, opt("WORD"), space0).map(|x| x.is_some()),
+            word: delimited(multispace0, opt(Caseless("WORD")), space0).map(|x| x.is_some()),
             fields: repeat_till(
                 0..,
                 seq!(
                     preceded(
-                        seq!(multispace0, "INDEX-FIELD", space1),
+                        seq!(multispace0, Caseless("INDEX-FIELD"), space1),
                         delimited('"', take_while(0.., |c: char| c != '"'), '"')
                     ),
-                    delimited(space0, alt(("ASCENDING", "DESCENDING")), space0),
-                    opt(delimited(space0, "ABBREVIATED", space0))
+                    delimited(space0, alt((Caseless("ASCENDING"), "DESCENDING")), space0),
+                    opt(delimited(space0, Caseless("ABBREVIATED"), space0))
                 ).map(|(name, order, abbrev)| IndexField {
                     name,
                     order: match order {
@@ -291,11 +293,11 @@ pub fn parse_index<'a>(input: &mut &'a str) -> PResult<Index<'a>> {
 }
 
 pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
-    delimited(multispace0, "ADD FIELD", multispace0).parse_next(input)?;
+    delimited(multispace0, Caseless("ADD FIELD"), multispace0).parse_next(input)?;
 
     seq!{Field {
-        name: terminated(delimited('"',take_while(0.., |c: char| c != '"'), '"'), seq!(multispace0, "OF", multispace0, delimited('"',take_while(0.., |c: char| c != '"'), '"'))),
-        r#type: preceded(seq!(multispace0, "AS", multispace1), alt(("logical", "character", "integer", "int64", "decimal", "date", "datetime", "recid", "raw"))).map(|x| match x {
+        name: terminated(delimited('"',take_while(0.., |c: char| c != '"'), '"'), seq!(multispace0, Caseless("OF"), multispace0, delimited('"',take_while(0.., |c: char| c != '"'), '"'))),
+        r#type: preceded(seq!(multispace0, Caseless("AS"), multispace1), alt((Caseless("logical"), Caseless("character"), Caseless("integer"), Caseless("int64"), Caseless("decimal"), Caseless("date"), Caseless("datetime"), Caseless("recid"), Caseless("raw")))).map(|x| match x {
             "logical" => DataType::Logical,
             "character" => DataType::Character,
             "integer" => DataType::Integer,
@@ -307,31 +309,31 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
             "raw" => DataType::Raw,
             _ => unreachable!(),
         }),
-        description: opt(preceded(keyword_trim("DESCRIPTION"), delimited(multispace0, until_field_keyword_or_new.recognize(), multispace1))),
-        format: preceded(keyword_trim("FORMAT"), trim_quotes(until_field_keyword_or_new)),
-        format_sa: opt(preceded(keyword_trim("FORMAT-SA"), trim_quotes(until_field_keyword_or_new))),
-        initial: preceded(keyword_trim("INITIAL"), trim_quotes(until_field_keyword_or_new)),
-        initial_sa: opt(preceded(keyword_trim("INITIAL-SA"), trim_quotes(until_field_keyword_or_new))),
-        label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_field_keyword_or_new))),
-        label_sa: opt(preceded(keyword_trim("LABEL-SA"), trim_quotes(until_field_keyword_or_new))),
-        position: preceded(keyword_trim("POSITION"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        sql_width: preceded(keyword_trim("SQL-WIDTH"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        can_read: opt(preceded(keyword_trim("CAN-READ"), trim_quotes(until_field_keyword_or_new))),
-        can_write: opt(preceded(keyword_trim("CAN-WRITE"), trim_quotes(until_field_keyword_or_new))),
-        view_as: opt(preceded(keyword_trim("VIEW-AS"), trim_quotes(until_field_keyword_or_new))),
-        column_label: opt(preceded(keyword_trim("COLUMN-LABEL"), trim_quotes(until_field_keyword_or_new))),
-        column_label_sa: opt(preceded(keyword_trim("COLUMN-LABEL-SA"), trim_quotes(until_field_keyword_or_new))),
-        valexp: opt(preceded(keyword_trim("VALEXP"), trim_quotes(until_field_keyword_or_new))),
-        valmsg: opt(preceded(keyword_trim("VALMSG"), trim_quotes(until_field_keyword_or_new))),
-        valmsg_sa: opt(preceded(keyword_trim("VALMSG-SA"), trim_quotes(until_field_keyword_or_new))),
-        help: opt(preceded(keyword_trim("HELP"), trim_quotes(until_field_keyword_or_new))),
-        help_sa: opt(preceded(keyword_trim("HELP-SA"), trim_quotes(until_field_keyword_or_new))),
-        extent: opt(preceded(keyword_trim("EXTENT"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
-        decimals: opt(preceded(keyword_trim("DECIMALS"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
-        order: preceded(keyword_trim("ORDER"), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        case_sensitive: opt(keyword_trim("CASE-SENSITIVE")).map(|x| x.is_some()),
-        mandatory: opt(keyword_trim("MANDATORY")).map(|x| x.is_some()),
-        field_trigger: opt(preceded(seq!(multispace0, "FIELD-TRIGGER", space1), take_while(0.., |c: char| ! c.is_newline()))),
+        description: opt(preceded(keyword_trim(Caseless("DESCRIPTION")), delimited(multispace0, until_field_keyword_or_new.recognize(), multispace1))),
+        format: preceded(keyword_trim(Caseless("FORMAT")), trim_quotes(until_field_keyword_or_new)),
+        format_sa: opt(preceded(keyword_trim(Caseless("FORMAT-SA")), trim_quotes(until_field_keyword_or_new))),
+        initial: preceded(keyword_trim(Caseless("INITIAL")), trim_quotes(until_field_keyword_or_new)),
+        initial_sa: opt(preceded(keyword_trim(Caseless("INITIAL-SA")), trim_quotes(until_field_keyword_or_new))),
+        label: opt(preceded(keyword_trim(Caseless("LABEL")), trim_quotes(until_field_keyword_or_new))),
+        label_sa: opt(preceded(keyword_trim(Caseless("LABEL-SA")), trim_quotes(until_field_keyword_or_new))),
+        position: preceded(keyword_trim(Caseless("POSITION")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        sql_width: preceded(keyword_trim(Caseless("SQL-WIDTH")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        can_read: opt(preceded(keyword_trim(Caseless("CAN-READ")), trim_quotes(until_field_keyword_or_new))),
+        can_write: opt(preceded(keyword_trim(Caseless("CAN-WRITE")), trim_quotes(until_field_keyword_or_new))),
+        view_as: opt(preceded(keyword_trim(Caseless("VIEW-AS")), trim_quotes(until_field_keyword_or_new))),
+        column_label: opt(preceded(keyword_trim(Caseless("COLUMN-LABEL")), trim_quotes(until_field_keyword_or_new))),
+        column_label_sa: opt(preceded(keyword_trim(Caseless("COLUMN-LABEL-SA")), trim_quotes(until_field_keyword_or_new))),
+        valexp: opt(preceded(keyword_trim(Caseless("VALEXP")), trim_quotes(until_field_keyword_or_new))),
+        valmsg: opt(preceded(keyword_trim(Caseless("VALMSG")), trim_quotes(until_field_keyword_or_new))),
+        valmsg_sa: opt(preceded(keyword_trim(Caseless("VALMSG-SA")), trim_quotes(until_field_keyword_or_new))),
+        help: opt(preceded(keyword_trim(Caseless("HELP")), trim_quotes(until_field_keyword_or_new))),
+        help_sa: opt(preceded(keyword_trim(Caseless("HELP-SA")), trim_quotes(until_field_keyword_or_new))),
+        extent: opt(preceded(keyword_trim(Caseless("EXTENT")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
+        decimals: opt(preceded(keyword_trim(Caseless("DECIMALS")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
+        order: preceded(keyword_trim(Caseless("ORDER")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        case_sensitive: opt(keyword_trim(Caseless("CASE-SENSITIVE"))).map(|x| x.is_some()),
+        mandatory: opt(keyword_trim(Caseless("MANDATORY"))).map(|x| x.is_some()),
+        field_trigger: opt(preceded(seq!(multispace0, Caseless("FIELD-TRIGGER"), space1), take_while(0.., |c: char| ! c.is_newline()))),
     }}.parse_next(input)
 }
 
@@ -368,19 +370,22 @@ pub fn parse_indices<'a>(input: &mut &'a str) -> PResult<Vec<Index<'a>>> {
 }
 
 pub fn add_not_index<'a>(input: &mut &'a str) -> PResult<&'a str> {
-    peek(preceded(multispace0, ("ADD ", not("INDEX"))))
+    peek(preceded(multispace0, ("ADD ", not(Caseless("INDEX")))))
         .map(|x| x.0)
         .parse_next(input)
 }
 
 pub fn add_not_index_succeed(input: &mut &str) -> PResult<bool> {
-    peek(preceded(multispace0, ("ADD ", not("INDEX"))))
-        .map(|_| true)
-        .parse_next(input)
+    peek(preceded(
+        multispace0,
+        (Caseless("ADD "), not(Caseless("INDEX"))),
+    ))
+    .map(|_| true)
+    .parse_next(input)
 }
 
 pub fn parse_file_end<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
-    let _ = seq!(multispace0, ".", multispace0, "PSC", multispace0).parse_next(input)?;
+    let _ = seq!(multispace0, ".", multispace0, Caseless("PSC"), multispace0).parse_next(input)?;
     Ok(Entity::End(
         seq! { End{
             codepage: delimited("cpstream=", till_line_ending, (multispace0, ".")),
@@ -391,14 +396,12 @@ pub fn parse_file_end<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
 }
 
 pub fn parse_file_end_succeed(input: &mut &str) -> PResult<bool> {
-    let _ = seq!(multispace0, ".", multispace0, "PSC", multispace0).parse_next(input)?;
+    let _ = seq!(multispace0, ".", multispace0, Caseless("PSC"), multispace0).parse_next(input)?;
     seq! { End{
         codepage: delimited("cpstream=", till_line_ending, (multispace0, ".")),
         length: preceded(multispace0, till_line_ending.parse_to())
     }}
-    .map(|x: End| {
-        x.codepage == "ISO8859-1"
-    })
+    .map(|x: End| x.codepage == "ISO8859-1")
     .parse_next(input)
 }
 
@@ -406,25 +409,25 @@ pub fn field_keyword<'a>(input: &mut &'a str) -> PResult<&'a str> {
     preceded(
         alt(("  ", "\n\n")),
         alt((
-            "DESCRIPTION",
-            "FORMAT",
-            "INITIAL",
-            "LABEL",
-            "POSITION",
-            "SQL-WIDTH",
-            "CAN-READ",
-            "CAN-WRITE",
-            "VIEW-AS",
-            "COLUMN-LABEL",
-            "VALEXP",
-            "VALMSG",
-            "HELP",
-            "EXTENT",
-            "DECIMALS",
-            "ORDER",
-            "CASE-SENSITIVE",
-            "MANDATORY",
-            "FIELD-TRIGGER",
+            Caseless("DESCRIPTION"),
+            Caseless("FORMAT"),
+            Caseless("INITIAL"),
+            Caseless("LABEL"),
+            Caseless("POSITION"),
+            Caseless("SQL-WIDTH"),
+            Caseless("CAN-READ"),
+            Caseless("CAN-WRITE"),
+            Caseless("VIEW-AS"),
+            Caseless("COLUMN-LABEL"),
+            Caseless("VALEXP"),
+            Caseless("VALMSG"),
+            Caseless("HELP"),
+            Caseless("EXTENT"),
+            Caseless("DECIMALS"),
+            Caseless("ORDER"),
+            Caseless("CASE-SENSITIVE"),
+            Caseless("MANDATORY"),
+            Caseless("FIELD-TRIGGER"),
         )),
     )
     .parse_next(input)
@@ -434,33 +437,37 @@ pub fn table_keyword<'a>(input: &mut &'a str) -> PResult<&'a str> {
     preceded(
         alt(("  ", "\n")),
         alt((
-            "AREA",
-            "LABEL",
-            "DESCRIPTION",
-            "VALEXP",
-            "VALMSG",
-            "DUMP-NAME",
-            "TABLE-TRIGGER",
-            "FIELD",
-            "INDEX",
+            Caseless("AREA"),
+            Caseless("LABEL"),
+            Caseless("DESCRIPTION"),
+            Caseless("VALEXP"),
+            Caseless("VALMSG"),
+            Caseless("DUMP-NAME"),
+            Caseless("TABLE-TRIGGER"),
+            Caseless("FIELD"),
+            Caseless("INDEX"),
         )),
     )
     .parse_next(input)
 }
 
 pub fn add<'a>(input: &mut &'a str) -> PResult<&'a str> {
-    peek(trace("ADD", preceded(seq!(newline, newline), "ADD"))).parse_next(input)
+    peek(trace(
+        "ADD",
+        preceded(seq!(newline, newline), Caseless("ADD")),
+    ))
+    .parse_next(input)
 }
 
 pub fn parse_sequence<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
-    trim("SEQUENCE").parse_next(input)?;
+    trim(Caseless("SEQUENCE")).parse_next(input)?;
 
     Ok(Entity::Sequence(seq!{Sequence {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
-        initial: preceded(seq!(multispace0, "INITIAL", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        increment: preceded(seq!(multispace0, "INCREMENT", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        cycle_on_limit: preceded(seq!(multispace0, "CYCLE-ON-LIMIT", multispace1), alt(("yes", "no"))).map(|x: &str| x == "yes"),
-        min_val: preceded(seq!(multispace0, "MIN-VAL", multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        initial: preceded(seq!(multispace0, Caseless("INITIAL"), multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        increment: preceded(seq!(multispace0, Caseless("INCREMENT"), multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        cycle_on_limit: preceded(seq!(multispace0, Caseless("CYCLE-ON-LIMIT"), multispace1), alt((Caseless("yes"), Caseless("no")))).map(|x: &str| x == "yes"),
+        min_val: preceded(seq!(multispace0, Caseless("MIN-VAL"), multispace1), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
     }}.parse_next(input)?))
 }
 
@@ -476,13 +483,15 @@ pub fn parse_df(input: &str) -> PResult<Vec<Entity<'_>>> {
     Ok(entities)
 }
 
-pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite + Seek) ) -> Result<impl ioWrite + 'a, std::io::Error> {
-
+pub fn write_df<'a>(
+    entities: &Vec<Entity>,
+    destination: &'a mut (impl ioWrite + Seek),
+) -> Result<impl ioWrite + 'a, std::io::Error> {
     for entity in entities {
         match entity {
             Entity::Database(ref db) => {
                 writeln!(destination, "UPDATE DATABASE \"{}\"", db.name)?;
-                writeln!(destination, )?;
+                writeln!(destination,)?;
             }
             Entity::Table(ref table) => {
                 writeln!(destination, "ADD TABLE \"{}\"", table.name)?;
@@ -499,25 +508,42 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                 if let Some(valmsg) = &table.valmsg {
                     writeln!(destination, "  VALMSG \"{}", valmsg.trim_matches('\n'))?;
                 }
-                writeln!(destination, "  DUMP-NAME \"{}", table.dump_name.trim_matches('\n'))?;
+                writeln!(
+                    destination,
+                    "  DUMP-NAME \"{}",
+                    table.dump_name.trim_matches('\n')
+                )?;
                 if let Some(table_triggers) = &table.table_triggers {
                     for trigger in table_triggers {
-                        writeln!(destination, "  TABLE-TRIGGER {}", trigger.trim_matches('\n').trim())?;
+                        writeln!(
+                            destination,
+                            "  TABLE-TRIGGER {}",
+                            trigger.trim_matches('\n').trim()
+                        )?;
                     }
                 }
-                writeln!(destination, )?;
+                writeln!(destination,)?;
 
                 for field in &table.fields {
-                    writeln!(destination, 
+                    writeln!(
+                        destination,
                         "ADD FIELD \"{}\" OF \"{}\" AS {}",
                         field.name, table.name, field.r#type
                     )?;
                     if let Some(desc) = &field.description {
                         writeln!(destination, "  DESCRIPTION {}", desc.trim_matches('\n'))?;
                     }
-                    writeln!(destination, "  FORMAT \"{}", field.format.trim_matches('\n'))?;
+                    writeln!(
+                        destination,
+                        "  FORMAT \"{}",
+                        field.format.trim_matches('\n')
+                    )?;
                     if let Some(format_sa) = &field.format_sa {
-                        writeln!(destination, "  FORMAT-SA \"{}", format_sa.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  FORMAT-SA \"{}",
+                            format_sa.trim_matches('\n')
+                        )?;
                     }
                     if field.initial.trim_matches('"').trim() == "?"
                         && (field.r#type == DataType::Date
@@ -526,7 +552,7 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                             || field.r#type == DataType::Logical
                             || field.r#type == DataType::RecId
                             || field.r#type == DataType::RecId
-                            || field.r#type == DataType::Decimal 
+                            || field.r#type == DataType::Decimal
                             || field.r#type == DataType::Int64
                             || field.r#type == DataType::Integer)
                     {
@@ -534,11 +560,19 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                     } else if field.initial.trim_matches('"').trim() == "?" {
                         writeln!(destination, "  INITIAL \"?\"")?;
                     } else {
-                        writeln!(destination, "  INITIAL \"{}", field.initial.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  INITIAL \"{}",
+                            field.initial.trim_matches('\n')
+                        )?;
                     }
 
                     if let Some(initial_sa) = &field.initial_sa {
-                        writeln!(destination, "  INITIAL-SA \"{}", initial_sa.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  INITIAL-SA \"{}",
+                            initial_sa.trim_matches('\n')
+                        )?;
                     }
                     if let Some(label) = &field.label {
                         writeln!(destination, "  LABEL \"{}", label.trim_matches('\n'))?;
@@ -552,16 +586,28 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                         writeln!(destination, "  CAN-READ \"{}", can_read.trim_matches('\n'))?;
                     }
                     if let Some(can_write) = &field.can_write {
-                        writeln!(destination, "  CAN-WRITE \"{}", can_write.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  CAN-WRITE \"{}",
+                            can_write.trim_matches('\n')
+                        )?;
                     }
                     if let Some(view_as) = &field.view_as {
                         writeln!(destination, "  VIEW-AS \"{}", view_as.trim_matches('\n'))?;
                     }
                     if let Some(column_label) = &field.column_label {
-                        writeln!(destination, "  COLUMN-LABEL \"{}", column_label.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  COLUMN-LABEL \"{}",
+                            column_label.trim_matches('\n')
+                        )?;
                     }
                     if let Some(column_label_sa) = &field.column_label_sa {
-                        writeln!(destination, "  COLUMN-LABEL-SA \"{}", column_label_sa.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  COLUMN-LABEL-SA \"{}",
+                            column_label_sa.trim_matches('\n')
+                        )?;
                     }
                     if let Some(valexp) = &field.valexp {
                         writeln!(destination, "  VALEXP \"{}", valexp.trim_matches('\n'))?;
@@ -570,7 +616,11 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                         writeln!(destination, "  VALMSG \"{}", valmsg.trim_matches('\n'))?;
                     }
                     if let Some(valmsg_sa) = &field.valmsg_sa {
-                        writeln!(destination, "  VALMSG-SA \"{}", valmsg_sa.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  VALMSG-SA \"{}",
+                            valmsg_sa.trim_matches('\n')
+                        )?;
                     }
                     if let Some(help) = &field.help {
                         writeln!(destination, "  HELP \"{}", help.trim_matches('\n'))?;
@@ -592,12 +642,20 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                         writeln!(destination, "  MANDATORY")?;
                     }
                     if let Some(field_trigger) = &field.field_trigger {
-                        writeln!(destination, "  FIELD-TRIGGER {}", field_trigger.trim_matches('\n'))?;
+                        writeln!(
+                            destination,
+                            "  FIELD-TRIGGER {}",
+                            field_trigger.trim_matches('\n')
+                        )?;
                     }
-                    writeln!(destination, )?;
+                    writeln!(destination,)?;
                 }
                 for index in table.indices.iter().flatten() {
-                    writeln!(destination, "ADD INDEX \"{}\" ON \"{}\"", index.name, table.name)?;
+                    writeln!(
+                        destination,
+                        "ADD INDEX \"{}\" ON \"{}\"",
+                        index.name, table.name
+                    )?;
                     writeln!(destination, "  AREA \"{}\"", index.area)?;
                     if index.unique {
                         writeln!(destination, "  UNIQUE")?;
@@ -615,7 +673,8 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                         writeln!(destination, "  WORD")?;
                     }
                     for field in &index.fields {
-                        write!(destination,
+                        write!(
+                            destination,
                             "  INDEX-FIELD \"{}\" {}",
                             field.name,
                             match field.order {
@@ -626,31 +685,32 @@ pub fn write_df<'a>(entities: &Vec<Entity>, destination: &'a mut (impl ioWrite +
                         if field.abbreviated {
                             write!(destination, " ABBREVIATED")?;
                         }
-                        writeln!(destination, )?;
+                        writeln!(destination,)?;
                     }
-                    writeln!(destination, )?;
+                    writeln!(destination,)?;
                 }
             }
             Entity::Sequence(ref seq) => {
                 writeln!(destination, "ADD SEQUENCE \"{}\"", seq.name)?;
                 writeln!(destination, "  INITIAL {}", seq.initial)?;
                 writeln!(destination, "  INCREMENT {}", seq.increment)?;
-                writeln!(destination, 
+                writeln!(
+                    destination,
                     "  CYCLE-ON-LIMIT {}",
                     if seq.cycle_on_limit { "yes" } else { "no" }
                 )?;
                 writeln!(destination, "  MIN-VAL {}", seq.min_val)?;
-                writeln!(destination, )?;
+                writeln!(destination,)?;
             }
             Entity::End(ref end) => {
                 writeln!(destination, ".")?;
                 writeln!(destination, "PSC")?;
                 writeln!(destination, "cpstream={}", end.codepage)?;
                 writeln!(destination, ".")?;
-                
+
                 // DF Files have the length of the file at the end so we get the current position, and add 10
                 let length = destination.seek(SeekFrom::Current(0))?;
-                
+
                 writeln!(destination, "{:0>10}", length + 10)?;
             }
             _ => {}
