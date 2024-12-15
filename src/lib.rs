@@ -237,7 +237,7 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
     Ok(Entity::Table(seq!{Table {
         name: trim_quotes(take_while(0.., |c: char| c != '"')),
         area: preceded(keyword_trim(Caseless("AREA")), delimited('"', take_while(0.., |c: char| c != '"'), '"')).parse_to(),
-        label: opt(preceded(keyword_trim(Caseless("LABEL")), trim_quotes(until_table_keyword_or_new))),
+        label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_table_keyword_or_new))),
         description: opt(trim_quotes(trim(preceded(keyword_trim(Caseless("DESCRIPTION")), until_table_keyword_or_new)))),
         valexp: opt(preceded(keyword_trim(Caseless("VALEXP")), trim_quotes(until_table_keyword_or_new))),
         valmsg: opt(preceded(keyword_trim(Caseless("VALMSG")), trim_quotes(until_table_keyword_or_new))),
@@ -314,7 +314,7 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         format_sa: opt(preceded(keyword_trim(Caseless("FORMAT-SA")), trim_quotes(until_field_keyword_or_new))),
         initial: preceded(keyword_trim(Caseless("INITIAL")), trim_quotes(until_field_keyword_or_new)),
         initial_sa: opt(preceded(keyword_trim(Caseless("INITIAL-SA")), trim_quotes(until_field_keyword_or_new))),
-        label: opt(preceded(keyword_trim(Caseless("LABEL")), trim_quotes(until_field_keyword_or_new))),
+        label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_field_keyword_or_new))),
         label_sa: opt(preceded(keyword_trim(Caseless("LABEL-SA")), trim_quotes(until_field_keyword_or_new))),
         position: preceded(keyword_trim(Caseless("POSITION")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
         sql_width: preceded(keyword_trim(Caseless("SQL-WIDTH")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
@@ -326,7 +326,7 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         valexp: opt(preceded(keyword_trim(Caseless("VALEXP")), trim_quotes(until_field_keyword_or_new))),
         valmsg: opt(preceded(keyword_trim(Caseless("VALMSG")), trim_quotes(until_field_keyword_or_new))),
         valmsg_sa: opt(preceded(keyword_trim(Caseless("VALMSG-SA")), trim_quotes(until_field_keyword_or_new))),
-        help: opt(preceded(keyword_trim(Caseless("HELP")), trim_quotes(until_field_keyword_or_new))),
+        help: opt(preceded(keyword_trim("HELP"), trim_quotes(until_field_keyword_or_new))),
         help_sa: opt(preceded(keyword_trim(Caseless("HELP-SA")), trim_quotes(until_field_keyword_or_new))),
         extent: opt(preceded(keyword_trim(Caseless("EXTENT")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
         decimals: opt(preceded(keyword_trim(Caseless("DECIMALS")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
@@ -370,18 +370,15 @@ pub fn parse_indices<'a>(input: &mut &'a str) -> PResult<Vec<Index<'a>>> {
 }
 
 pub fn add_not_index<'a>(input: &mut &'a str) -> PResult<&'a str> {
-    peek(preceded(multispace0, ("ADD ", not(Caseless("INDEX")))))
+    peek(preceded(multispace0, ("ADD ", not("INDEX"))))
         .map(|x| x.0)
         .parse_next(input)
 }
 
 pub fn add_not_index_succeed(input: &mut &str) -> PResult<bool> {
-    peek(preceded(
-        multispace0,
-        (Caseless("ADD "), not(Caseless("INDEX"))),
-    ))
-    .map(|_| true)
-    .parse_next(input)
+    peek(preceded(multispace0, (Caseless("ADD "), not("INDEX"))))
+        .map(|_| true)
+        .parse_next(input)
 }
 
 pub fn parse_file_end<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
@@ -409,10 +406,10 @@ pub fn field_keyword<'a>(input: &mut &'a str) -> PResult<&'a str> {
     preceded(
         alt(("  ", "\n\n")),
         alt((
-            Caseless("DESCRIPTION"),
+            "DESCRIPTION",
             Caseless("FORMAT"),
             Caseless("INITIAL"),
-            Caseless("LABEL"),
+            "LABEL",
             Caseless("POSITION"),
             Caseless("SQL-WIDTH"),
             Caseless("CAN-READ"),
@@ -421,10 +418,10 @@ pub fn field_keyword<'a>(input: &mut &'a str) -> PResult<&'a str> {
             Caseless("COLUMN-LABEL"),
             Caseless("VALEXP"),
             Caseless("VALMSG"),
-            Caseless("HELP"),
+            "HELP",
             Caseless("EXTENT"),
             Caseless("DECIMALS"),
-            Caseless("ORDER"),
+            "ORDER",
             Caseless("CASE-SENSITIVE"),
             Caseless("MANDATORY"),
             Caseless("FIELD-TRIGGER"),
@@ -444,8 +441,8 @@ pub fn table_keyword<'a>(input: &mut &'a str) -> PResult<&'a str> {
             Caseless("VALMSG"),
             Caseless("DUMP-NAME"),
             Caseless("TABLE-TRIGGER"),
-            Caseless("FIELD"),
-            Caseless("INDEX"),
+            "FIELD",
+            "INDEX",
         )),
     )
     .parse_next(input)
