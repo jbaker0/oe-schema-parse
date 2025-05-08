@@ -297,14 +297,14 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
 
     seq!{Field {
         name: terminated(delimited('"',take_while(0.., |c: char| c != '"'), '"'), seq!(multispace0, Caseless("OF"), multispace0, delimited('"',take_while(0.., |c: char| c != '"'), '"'))),
-        r#type: preceded(seq!(multispace0, Caseless("AS"), multispace1), alt((Caseless("logical"), Caseless("character"), Caseless("integer"), Caseless("int64"), Caseless("decimal"), Caseless("date"), Caseless("datetime"), Caseless("recid"), Caseless("raw")))).map(|x| match x {
+        r#type: preceded(seq!(multispace0, Caseless("AS"), multispace1), alt((Caseless("logical"), Caseless("character"), Caseless("integer"), Caseless("int64"), Caseless("decimal"), Caseless("datetime"), Caseless("date"), Caseless("recid"), Caseless("raw")))).map(|x| match x {
             "logical" => DataType::Logical,
             "character" => DataType::Character,
             "integer" => DataType::Integer,
             "int64" => DataType::Int64,
             "decimal" => DataType::Decimal,
-            "date" => DataType::Date,
             "datetime" => DataType::DateTime,
+            "date" => DataType::Date,
             "recid" => DataType::RecId,
             "raw" => DataType::Raw,
             _ => unreachable!(),
