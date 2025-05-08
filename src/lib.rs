@@ -90,7 +90,7 @@ pub struct Field<'a> {
     pub r#type: DataType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<&'a str>,
-    pub format: &'a str,
+    pub format: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format_sa: Option<&'a str>,
     pub initial: &'a str,
@@ -310,7 +310,7 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
             _ => unreachable!(),
         }),
         description: opt(preceded(keyword_trim(Caseless("DESCRIPTION")), delimited(multispace0, until_field_keyword_or_new.recognize(), multispace1))),
-        format: preceded(keyword_trim(Caseless("FORMAT")), trim_quotes(until_field_keyword_or_new)),
+        format: opt(preceded(keyword_trim(Caseless("FORMAT")), trim_quotes(until_field_keyword_or_new))),
         format_sa: opt(preceded(keyword_trim(Caseless("FORMAT-SA")), trim_quotes(until_field_keyword_or_new))),
         initial: preceded(keyword_trim(Caseless("INITIAL")), trim_quotes(until_field_keyword_or_new)),
         initial_sa: opt(preceded(keyword_trim(Caseless("INITIAL-SA")), trim_quotes(until_field_keyword_or_new))),
@@ -530,11 +530,9 @@ pub fn write_df<'a>(
                     if let Some(desc) = &field.description {
                         writeln!(destination, "  DESCRIPTION {}", desc.trim_matches('\n'))?;
                     }
-                    writeln!(
-                        destination,
-                        "  FORMAT \"{}",
-                        field.format.trim_matches('\n')
-                    )?;
+                    if let Some(format) = &field.format {
+                        writeln!(destination, "  FORMAT \"{}", format.trim_matches('\n'))?;
+                    }
                     if let Some(format_sa) = &field.format_sa {
                         writeln!(
                             destination,
