@@ -93,7 +93,7 @@ pub struct Field<'a> {
     pub format: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format_sa: Option<&'a str>,
-    pub initial: &'a str,
+    pub initial: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_sa: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -312,7 +312,7 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         description: opt(preceded(keyword_trim(Caseless("DESCRIPTION")), delimited(multispace0, until_field_keyword_or_new.recognize(), multispace1))),
         format: opt(preceded(keyword_trim(Caseless("FORMAT")), trim_quotes(until_field_keyword_or_new))),
         format_sa: opt(preceded(keyword_trim(Caseless("FORMAT-SA")), trim_quotes(until_field_keyword_or_new))),
-        initial: preceded(keyword_trim(Caseless("INITIAL")), trim_quotes(until_field_keyword_or_new)),
+        initial: opt(preceded(keyword_trim(Caseless("INITIAL")), trim_quotes(until_field_keyword_or_new))),
         initial_sa: opt(preceded(keyword_trim(Caseless("INITIAL-SA")), trim_quotes(until_field_keyword_or_new))),
         label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_field_keyword_or_new))),
         label_sa: opt(preceded(keyword_trim(Caseless("LABEL-SA")), trim_quotes(until_field_keyword_or_new))),
@@ -540,7 +540,9 @@ pub fn write_df<'a>(
                             format_sa.trim_matches('\n')
                         )?;
                     }
-                    if field.initial.trim_matches('"').trim() == "?"
+                    if field
+                        .initial
+                        .map_or(false, |initial| initial.trim_matches('"').trim() == "?")
                         && (field.r#type == DataType::Date
                             || field.r#type == DataType::Character
                             || field.r#type == DataType::DateTime
@@ -551,15 +553,15 @@ pub fn write_df<'a>(
                             || field.r#type == DataType::Int64
                             || field.r#type == DataType::Integer)
                     {
-                        writeln!(destination, "  INITIAL {}", field.initial.trim())?;
-                    } else if field.initial.trim_matches('"').trim() == "?" {
-                        writeln!(destination, "  INITIAL \"?\"")?;
-                    } else {
-                        writeln!(
-                            destination,
-                            "  INITIAL \"{}",
-                            field.initial.trim_matches('\n')
-                        )?;
+                        if let Some(initial) = field.initial {
+                            writeln!(destination, "  INITIAL {}", initial.trim())?;
+                        }
+                    } else if let Some(initial) = field.initial {
+                        if initial.trim_matches('"').trim() == "?" {
+                            writeln!(destination, "  INITIAL \"?\"")?;
+                        } else {
+                            writeln!(destination, "  INITIAL \"{}", initial.trim_matches('\n'))?;
+                        }
                     }
 
                     if let Some(initial_sa) = &field.initial_sa {
