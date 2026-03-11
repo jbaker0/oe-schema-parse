@@ -101,7 +101,10 @@ pub struct Field<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label_sa: Option<&'a str>,
     pub position: i32,
-    pub sql_width: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sql_width: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub can_read: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -317,7 +320,8 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         label: opt(preceded(keyword_trim("LABEL"), trim_quotes(until_field_keyword_or_new))),
         label_sa: opt(preceded(keyword_trim(Caseless("LABEL-SA")), trim_quotes(until_field_keyword_or_new))),
         position: preceded(keyword_trim(Caseless("POSITION")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        sql_width: preceded(keyword_trim(Caseless("SQL-WIDTH")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
+        max_width: opt(preceded(keyword_trim(Caseless("MAX-WIDTH")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
+        sql_width: opt(preceded(keyword_trim(Caseless("SQL-WIDTH")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
         can_read: opt(preceded(keyword_trim(Caseless("CAN-READ")), trim_quotes(until_field_keyword_or_new))),
         can_write: opt(preceded(keyword_trim(Caseless("CAN-WRITE")), trim_quotes(until_field_keyword_or_new))),
         view_as: opt(preceded(keyword_trim(Caseless("VIEW-AS")), trim_quotes(until_field_keyword_or_new))),
@@ -578,7 +582,9 @@ pub fn write_df<'a>(
                         writeln!(destination, "  LABEL-SA \"{}", label_sa.trim_matches('\n'))?;
                     }
                     writeln!(destination, "  POSITION {}", field.position)?;
-                    writeln!(destination, "  SQL-WIDTH {}", field.sql_width)?;
+                    if let Some(sql_width) = &field.sql_width {
+                        writeln!(destination, "  SQL-WIDTH {}", sql_width)?;
+                    }
                     if let Some(can_read) = &field.can_read {
                         writeln!(destination, "  CAN-READ \"{}", can_read.trim_matches('\n'))?;
                     }
