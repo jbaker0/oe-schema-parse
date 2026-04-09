@@ -335,8 +335,8 @@ pub fn parse_field<'a>(input: &mut &'a str) -> PResult<Field<'a>> {
         extent: opt(preceded(keyword_trim(Caseless("EXTENT")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
         decimals: opt(preceded(keyword_trim(Caseless("DECIMALS")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to())),
         order: preceded(keyword_trim(Caseless("ORDER")), take_while(0.., |c: char| c.is_ascii_digit()).parse_to()),
-        case_sensitive: opt(keyword_trim(Caseless("CASE-SENSITIVE"))).map(|x| x.is_some()),
         mandatory: opt(keyword_trim(Caseless("MANDATORY"))).map(|x| x.is_some()),
+        case_sensitive: opt(keyword_trim(Caseless("CASE-SENSITIVE"))).map(|x| x.is_some()),
         field_trigger: opt(preceded(seq!(multispace0, Caseless("FIELD-TRIGGER"), space1), take_while(0.., |c: char| ! c.is_newline()))),
     }}.parse_next(input)
 }
