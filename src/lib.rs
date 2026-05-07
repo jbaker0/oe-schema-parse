@@ -80,6 +80,8 @@ pub struct Table<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "INDICES")]
     pub indices: Option<Vec<Index<'a>>>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -248,6 +250,7 @@ pub fn parse_table<'a>(input: &mut &'a str) -> PResult<Entity<'a>> {
         table_triggers: opt(repeat_till(0.., preceded(multispace0, preceded(Caseless("TABLE-TRIGGER"), take_while(0.., |c:char|!c.is_newline()))), trace("ADD_NOT_INDEX", peek(preceded(take_while(0..,|c: char| c.is_newline()), ("ADD ", not("INDEX")))))).map(|x: (Vec<&str>, (&str, ())) | x.0)),
         fields: repeat_till(0.., preceded(multispace0, parse_field), trace("ADD_NOT_FIELD", peek(preceded(take_while(0..,|c: char| c.is_newline()), ("ADD ", not("FIELD")))))).map(|x: (Vec<Field>, (&str, ())) | x.0),
         indices: opt(parse_indices),
+        hidden: opt(()).map(|_| false),
     }
     }.parse_next(input)?))
 }
